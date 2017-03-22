@@ -1,0 +1,50 @@
+{
+        "queries": [
+                {
+                        "name": "Find all owned Domain Admins",
+                        "requireNodeSelect": false,
+                        "query": "MATCH (n:Group) WHERE n.name =~ {name} WITH n MATCH p=(n)<-[r:MemberOf*1..]-(m) WHERE exists(m.owned) RETURN nodes(p),relationships(p)",
+                        "allowCollapse": false,
+                        "props": {"name": "(?i).*DOMAIN ADMINS.*"}
+                },
+                {
+                        "name": "Find Shortest Paths from owned node to Domain Admins",
+                        "requireNodeSelect": true,
+                        "nodeSelectQuery":  {
+                                "query":"MATCH (n:Group) WHERE n.name =~ {name} RETURN n.name",
+                                "queryProps": {"name":"(?i).*DOMAIN ADMINS.*"},
+                		            "onFinish": "MATCH (n),(m:Group {name:{result}}),p=shortestPath((n)-[*1..]->(m)) WHERE exists(n.owned) RETURN p",
+                	            	"start":"",
+                            		"end": "{}",
+                            		"allowCollapse": true,
+                            		"boxTitle": "Select domain to map..."
+                        }
+                },
+                {
+                        "name": "Show wave",
+                        "requireNodeSelect": true,
+                        "nodeSelectQuery":  {
+                                "query":"MATCH (n) WHERE exists(n.wave) WITH DISTINCT n.wave as d RETURN toString(d) ORDER BY d",
+                                "queryProps": {},
+                                "onFinish": "OPTIONAL MATCH (n1:User {wave:toInt({result})}) WITH collect(distinct n1) as c1 OPTIONAL MATCH (n2:Computer {wave:toInt({result})}) WITH collect(distinct n2) + c1 as c2 OPTIONAL MATCH (n3:Group {wave:toInt({result})}) WITH c2, collect(distinct n3) + c2 as c3 UNWIND c2 as n UNWIND c3 as m MATCH (n)-[r]->(m) RETURN n,r,m",
+                                "start": "",
+                                "end": "",
+                                "allowCollapse": true,
+                                "boxTitle": "Select wave..."
+                        }
+                },
+                {
+                        "name": "Show delta for wave",
+                        "requireNodeSelect": true,
+                        "nodeSelectQuery":  {
+                                "query":"MATCH (n) WHERE exists(n.wave) WITH DISTINCT n.wave as d RETURN toString(d) ORDER BY d",
+                                "queryProps": {},
+                                "onFinish": "MATCH (n)-[r]->(m) WHERE n.wave<=toInt({result}) RETURN n,r,m",
+                                "start": "",
+                                "end": "",
+                                "allowCollapse": true,
+                                "boxTitle": "Select wave to show deltas..."
+                        }
+                }
+	]
+}

@@ -1,0 +1,2 @@
+BGRIFFIN@EXTERNAL.LOCAL,Mimikatz on MANAGEMENT3
+FILESERVER6.INTERNAL.LOCAL,Local Administrator password reuse (dumped from MANAGEMENT3)
