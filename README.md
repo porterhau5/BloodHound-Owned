@@ -39,6 +39,7 @@ Usage: ruby bh-owned.rb [options]
     -U, --url <url>                  URL of Neo4j RESTful host  (default: 'http://127.0.0.1:7474/')
     -n, --nodes                      get all node names
     -a, --add <file>                 add 'owned' and 'wave' property to nodes in <file>
+    -s, --spw <file>                 add 'SharesPasswordWith' relationship between all nodes in <file>
     -w, --wave <num>                 value to set 'wave' property (override default behavior)
     -e, --examples                   reference doc of customized Cypher queries for BloodHound
 ```
@@ -124,6 +125,28 @@ MATCH (n) WHERE (n.name = '$name') SET n.owned = '$method', n.wave = $num
 
 Find spread of compromise for owned nodes in wave $num:
 OPTIONAL MATCH (n1:User {wave:$num}) WITH collect(distinct n1) as c1 OPTIONAL MATCH (n2:Computer {wave:$num}) WITH collect(distinct n2) + c1 as c2 UNWIND c2 as n OPTIONAL MATCH p=shortestPath((n)-[*..20]->(m)) WHERE not(exists(m.wave)) WITH DISTINCT(m) SET m.wave=$num
+
+Show clusters of password reuse:
+MATCH p=(n)-[r:SharesPasswordWith]-(m) RETURN p
+```
+Use `-s` to add a file containing a list of nodes with the same password. This will create a new relationship, "SharesPasswordWith", between each node in the list. Useful for representing Computers with a common local admin password, or Users that use the same password for multiple accounts:
+```
+$ cat common-local-admins.txt
+MANAGEMENT3.INTERNAL.LOCAL
+FILESERVER6.INTERNAL.LOCAL
+SYSTEM38.INTERNAL.LOCAL
+DESKTOP40.EXTERNAL.LOCAL
+
+$ ruby bh-owned.rb -s common-local-admins.txt
+[*] Using default username: neo4j
+[*] Using default password: BloodHound
+[*] Using default URL: http://127.0.0.1:7474/
+[+] Created SharesPasswordWith relationship: 'MANAGEMENT3.INTERNAL.LOCAL' and 'FILESERVER6.INTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship: 'MANAGEMENT3.INTERNAL.LOCAL' and 'SYSTEM38.INTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship: 'MANAGEMENT3.INTERNAL.LOCAL' and 'DESKTOP40.EXTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship: 'FILESERVER6.INTERNAL.LOCAL' and 'SYSTEM38.INTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship: 'FILESERVER6.INTERNAL.LOCAL' and 'DESKTOP40.EXTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship: 'SYSTEM38.INTERNAL.LOCAL' and 'DESKTOP40.EXTERNAL.LOCAL'
 ```
 If you want to start over and remove any custom properties from your database nodes, issue the following Cypher query:
 ```

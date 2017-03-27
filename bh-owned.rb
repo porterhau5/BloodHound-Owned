@@ -1,7 +1,7 @@
 #!/usr/bin/ruby env
 #Encoding: UTF-8
 
-# Written by: @porterhau5 - 3/21/17
+# Written by: @porterhau5 - 3/27/17
 
 require 'net/http'
 require 'uri'
@@ -55,6 +55,9 @@ def examples()
   puts ""
   puts "Find spread of compromise for owned nodes in wave $num:"
   puts "OPTIONAL MATCH (n1:User {wave:$num}) WITH collect(distinct n1) as c1 OPTIONAL MATCH (n2:Computer {wave:$num}) WITH collect(distinct n2) + c1 as c2 UNWIND c2 as n OPTIONAL MATCH p=shortestPath((n)-[*..20]->(m)) WHERE not(exists(m.wave)) WITH DISTINCT(m) SET m.wave=$num"
+  puts ""
+  puts "Show clusters of password reuse:"
+  puts "MATCH p=(n)-[r:SharesPasswordWith]-(m) RETURN p"
   exit
 end
 
@@ -74,6 +77,16 @@ def craft(options)
     # once nodes are added, set "wave" for newly owned nodes
     puts green("[+]") + " Querying and updating new owned nodes"
     hash['statements'] << {'statement' => "OPTIONAL MATCH (n1:User {wave:#{options.wave}}) WITH collect(distinct n1) as c1 OPTIONAL MATCH (n2:Computer {wave:#{options.wave}}) WITH collect(distinct n2) + c1 as c2 UNWIND c2 as n OPTIONAL MATCH p=shortestPath((n)-[*..20]->(m)) WHERE not(exists(m.wave)) WITH DISTINCT(m) SET m.wave=#{options.wave}"}
+    return hash.to_json
+  # Create SharesPasswordWith relationships between all nodes in file
+  elsif options.spw
+    nodes = []
+    File.foreach(options.spw) do |node|
+      nodes.push(node)
+    end
+    nodes.combination(2).to_a.each do |n,m|
+      hash['statements'] << {'statement' => "MATCH (n {name:\"#{n.chomp}\"}),(m {name:\"#{m.chomp}\"}) WITH n,m CREATE UNIQUE (n)-[:SharesPasswordWith]->(m) WITH n,m CREATE UNIQUE (n)<-[:SharesPasswordWith]-(m) RETURN \'#{n.chomp}\',\'#{m.chomp}\'", 'includeStats' => true}
+    end
     return hash.to_json
   end
 end
@@ -117,10 +130,8 @@ def parse(options, response)
     # sort, uniq, display
     puts out.sort.uniq
   elsif options.wave == -1
-    # uncomment line below to debug
-    #puts JSON.pretty_generate(JSON.parse(response.body))
-    data = JSON.parse(response.body)
-    data['results'].each do |r|
+    resp = JSON.parse(response.body)
+    resp['results'].each do |r|
       r['data'].each do |d|
         if d['row'] == [nil]
           puts blue("[*]") + " No previously owned nodes found, setting wave to 1"
@@ -129,8 +140,40 @@ def parse(options, response)
           options.wave = d['row'][0].to_i + 1
         end
       end if r['data'].any?
-    end if data['results'].any?
+    end if resp['results'].any?
+  elsif options.spw
+    resp = JSON.parse(response.body)
+    resp['results'].each do |r|
+      r['stats'].each do |s|
+        # check stats to see if a relationship was created
+        if s.first == "relationships_created" and s.last == 0
+          names = []
+          # node names provided are returned as columns
+          r['columns'].each do |c|
+            names.push(c)
+          end
+          # if there are records in data, then relationship already exists
+          if r['data'].any?
+            r['data'].each do |d|
+              puts blue("[*]") + " Relationship already exists for #{names.first} and #{names.last}"
+            end
+          else
+            puts red("[-]") + " Relationship not created for #{names.first} and #{names.last} (check spelling)"
+          end
+        elsif s.first == "relationships_created" and s.last == 2
+          names = []
+          r['columns'].each do |c|
+            names.push(c)
+          end
+          puts green("[+]") + " Created SharesPasswordWith relationship between #{names.first} and #{names.last}"
+        elsif s.first == "relationships_created" and (s.last != 0 or s.last != 2)
+          puts "Something went wrong when creating SharesPasswordWith relationship"
+        end
+      end if r['stats'].any?
+    end if resp['results'].any? 
   end
+  # uncomment line below to debug
+  #puts JSON.pretty_generate(JSON.parse(response.body))
 end
 
 def main()
@@ -143,6 +186,7 @@ def main()
     opt.on('-U', '--url <url>', 'URL of Neo4j RESTful host  (default: \'http://127.0.0.1:7474/\')') { |o| options.url = o }
     opt.on('-n', '--nodes', 'get all node names') { |o| options.nodes = o }
     opt.on('-a', '--add <file>', 'add \'owned\' and \'wave\' property to nodes in <file>') { |o| options.add = o }
+    opt.on('-s', '--spw <file>', 'add \'SharesPasswordWith\' relationship between all nodes in <file>') { |o| options.spw = o }
     opt.on('-w', '--wave <num>', Integer, 'value to set \'wave\' property (override default behavior)') { |o| options.wave = o }
     opt.on('-e', '--examples', 'reference doc of customized Cypher queries for BloodHound') { |o| options.examples = o }
   end.parse!
@@ -177,6 +221,13 @@ def main()
       # -1 means we don't know current max "n.wave" value
       options.wave = -1
       sendrequest(options)
+    end
+  end
+
+  if options.spw
+    if File.exist?(options.spw) == false
+      puts red("#{options.spw} does not exist! Exiting.")
+      exit 1
     end
   end
 
