@@ -1,7 +1,7 @@
 #!/usr/bin/ruby env
 #Encoding: UTF-8
 
-# Written by: @porterhau5 - 3/27/17
+# Written by: @porterhau5 - 3/29/17
 
 require 'net/http'
 require 'uri'
@@ -67,17 +67,33 @@ def craft(options)
   if options.nodes
     hash['statements'] << {'statement' => "MATCH (n) RETURN (n.name)"}
     return hash.to_json
+
+  # remove owned and wave properties, delete SharesPasswordWith relationships
+  elsif options.reset
+    puts blue("[*]") + " Removing all custom properties and SharesPasswordWith relationships"
+    hash['statements'] << {'statement' => "MATCH (n) WHERE exists(n.wave) OR exists(n.owned) REMOVE n.wave, n.owned"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:SharesPasswordWith]-(m) DELETE r"}
+    return hash.to_json
+
+  # once nodes are added, set 'wave' for newly owned nodes
+  elsif options.spread
+    hash['statements'] << {'statement' => "OPTIONAL MATCH (n1:User {wave:#{options.wave}}) WITH collect(distinct n1) as c1 OPTIONAL MATCH (n2:Computer {wave:#{options.wave}}) WITH collect(distinct n2) + c1 as c2 UNWIND c2 as n OPTIONAL MATCH p=shortestPath((n)-[*..20]->(m)) WHERE not(exists(m.wave)) WITH DISTINCT(m) SET m.wave=#{options.wave} RETURN m.name, #{options.wave}", 'includeStats' => true}
+    return hash.to_json
+
   # add 'owned' property to nodes from file
   elsif options.add
     File.foreach(options.add) do |node|
       name, method = node.split(',', 2)
-      puts green("[+]") + " Adding #{name.chomp} to wave #{options.wave} via #{method.chomp}"
-      hash['statements'] << {'statement' => "MATCH (n) WHERE (n.name = \"#{name.chomp}\") SET n.owned = \"#{method.chomp}\", n.wave = #{options.wave}"}
+      # if -w flag set, then overwrite previous property if it exists, otherwise don't overwrite
+      if options.forceWave.nil?
+        hash['statements'] << {'statement' => "MATCH (n) WHERE (n.name = \"#{name.chomp}\") SET n.owned = \"#{method.chomp}\", n.wave = #{options.wave} RETURN \'#{name.chomp}\', \'#{options.wave}\', \'#{method.chomp}\'", 'includeStats' => true}
+      else
+        # this uses a Cypher hack for doing if/else conditionals
+        hash['statements'] << {'statement' => "MATCH (n) WHERE (n.name = \"#{name.chomp}\") FOREACH (ignoreMe in CASE WHEN exists(n.wave) THEN [1] ELSE [] END | SET n.wave=n.wave) FOREACH (ignoreMe in CASE WHEN not(exists(n.wave)) THEN [1] ELSE [] END | SET n.owned = \"#{method.chomp}\", n.wave = #{options.wave}) RETURN \'#{name.chomp}\',\'#{options.wave}\',\'#{method.chomp}\'", 'includeStats' => true}
+      end
     end
-    # once nodes are added, set "wave" for newly owned nodes
-    puts green("[+]") + " Querying and updating new owned nodes"
-    hash['statements'] << {'statement' => "OPTIONAL MATCH (n1:User {wave:#{options.wave}}) WITH collect(distinct n1) as c1 OPTIONAL MATCH (n2:Computer {wave:#{options.wave}}) WITH collect(distinct n2) + c1 as c2 UNWIND c2 as n OPTIONAL MATCH p=shortestPath((n)-[*..20]->(m)) WHERE not(exists(m.wave)) WITH DISTINCT(m) SET m.wave=#{options.wave}"}
     return hash.to_json
+
   # Create SharesPasswordWith relationships between all nodes in file
   elsif options.spw
     nodes = []
@@ -115,7 +131,9 @@ def sendrequest(options)
 end
 
 def parse(options, response)
+  #
   # print all nodes
+  #
   if options.nodes
     out = []
     data = JSON.parse(response.body)
@@ -129,6 +147,9 @@ def parse(options, response)
     end if data['results'].any?
     # sort, uniq, display
     puts out.sort.uniq
+  #
+  # determine wave number
+  #
   elsif options.wave == -1
     resp = JSON.parse(response.body)
     resp['results'].each do |r|
@@ -141,17 +162,86 @@ def parse(options, response)
         end
       end if r['data'].any?
     end if resp['results'].any?
+  #
+  # parse spread of compromise
+  #
+  elsif options.spread
+    resp = JSON.parse(response.body)
+    resp['results'].each do |r|
+      puts blue("[*]") + " Finding spread of compromise for wave #{options.wave}"
+      r['stats'].each do |s|
+        # check stats to see if properties were set
+        if s.first == "properties_set" and s.last == 0
+          # if there are records in data, then properties already set
+          if r['data'].any?
+            r['data'].each do |d|
+              puts blue("[*]") + " No additional nodes found for wave #{options.wave}"
+            end
+          else
+            puts red("[-]") + " No additional nodes found for wave #{options.wave}"
+          end
+        elsif s.first == "properties_set" and s.last != 0
+          out = []
+          count = 0
+          # cycle through rows returned
+          r['data'].each do |d|
+            next unless not d['row'][0].to_s.empty?
+            out.push(d['row'][0])
+            count += 1
+          end if r['data'].any?
+          puts green("[+]") + " #{count} nodes found:"
+          puts out.sort.uniq
+        end
+      end if r['stats'].any?
+    end if resp['results'].any?
+  #
+  # parse nodes added
+  #
+  elsif options.add
+    success = true
+    resp = JSON.parse(response.body)
+    resp['results'].each do |r|
+      # node names provided are returned as columns
+      names = []
+      r['columns'].each do |c|
+        names.push(c)
+      end
+      r['stats'].each do |s|
+        # check stats to see if properties were set
+        if s.first == "properties_set" and s.last == 0
+          # if there are records in data, then properties already set
+          if not r['data'].any?
+            puts red("[-]") + " Properties not added for #{names.first} (node not found, check spelling?)"
+            success = false
+          end
+        elsif s.first == "properties_set" and s.last == 2
+          puts green("[+]") + " Success, marked #{names.first} as owned in wave #{names[1]} via #{names.last}"
+        elsif s.first == "properties_set" and s.last == 1
+          puts blue("[*]") + " Properties already exist for #{names.first}, skipping (overwrite with flag -w <num>)"
+        end
+      end if r['stats'].any?
+    end if resp['results'].any? 
+    # if all nodes were added successfully or skipped, find spread for new nodes
+    if success
+      options.spread = true
+      sendrequest(options)
+    else
+      puts red("[-]") + " Skipping finding spread of compromise due to \"node not found\" error"
+    end
+  #
+  # parse SharesPasswordWith
+  #
   elsif options.spw
     resp = JSON.parse(response.body)
     resp['results'].each do |r|
+      # node names provided are returned as columns
+      names = []
+      r['columns'].each do |c|
+        names.push(c)
+      end
       r['stats'].each do |s|
         # check stats to see if a relationship was created
         if s.first == "relationships_created" and s.last == 0
-          names = []
-          # node names provided are returned as columns
-          r['columns'].each do |c|
-            names.push(c)
-          end
           # if there are records in data, then relationship already exists
           if r['data'].any?
             r['data'].each do |d|
@@ -161,16 +251,12 @@ def parse(options, response)
             puts red("[-]") + " Relationship not created for #{names.first} and #{names.last} (check spelling)"
           end
         elsif s.first == "relationships_created" and s.last == 2
-          names = []
-          r['columns'].each do |c|
-            names.push(c)
-          end
           puts green("[+]") + " Created SharesPasswordWith relationship between #{names.first} and #{names.last}"
         elsif s.first == "relationships_created" and (s.last != 0 or s.last != 2)
           puts "Something went wrong when creating SharesPasswordWith relationship"
         end
       end if r['stats'].any?
-    end if resp['results'].any? 
+    end if resp['results'].any?
   end
   # uncomment line below to debug
   #puts JSON.pretty_generate(JSON.parse(response.body))
@@ -188,6 +274,7 @@ def main()
     opt.on('-a', '--add <file>', 'add \'owned\' and \'wave\' property to nodes in <file>') { |o| options.add = o }
     opt.on('-s', '--spw <file>', 'add \'SharesPasswordWith\' relationship between all nodes in <file>') { |o| options.spw = o }
     opt.on('-w', '--wave <num>', Integer, 'value to set \'wave\' property (override default behavior)') { |o| options.wave = o }
+    opt.on('--reset', 'remove all custom properties and SharesPasswordWith relationships') { |o| options.reset = o }
     opt.on('-e', '--examples', 'reference doc of customized Cypher queries for BloodHound') { |o| options.examples = o }
   end.parse!
 
@@ -221,6 +308,7 @@ def main()
       # -1 means we don't know current max "n.wave" value
       options.wave = -1
       sendrequest(options)
+      options.forceWave = true
     end
   end
 
@@ -230,6 +318,8 @@ def main()
       exit 1
     end
   end
+
+  options.spread = false
 
   sendrequest(options)
 end
