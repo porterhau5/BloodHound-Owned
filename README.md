@@ -61,9 +61,12 @@ $ ruby bh-owned.rb -a 1st-wave.txt
 [*] Using default password: BloodHound
 [*] Using default URL: http://127.0.0.1:7474/
 [*] No previously owned nodes found, setting wave to 1
-[+] Adding BLOPER@INTERNAL.LOCAL to wave 1 via LLMNR wpad
-[+] Adding JCARNEAL@INTERNAL.LOCAL to wave 1 via NBNS wpad
-[+] Querying and updating new owned nodes
+[+] Success, marked 'BLOPER@INTERNAL.LOCAL' as owned in wave '1' via 'LLMNR wpad'
+[+] Success, marked 'JCARNEAL@INTERNAL.LOCAL' as owned in wave '1' via 'NBNS wpad'
+[*] Finding spread of compromise for wave 1
+[+] 2 nodes found:
+DOMAIN USERS@INTERNAL.LOCAL
+SYSTEM38.INTERNAL.LOCAL
 ```
 The script will first query the database and determine the latest wave added. It then increments it by one so that the incoming additions will be in the new wave. You can override this behavior by setting the `-w` flag to the preferred wave value.
 
@@ -84,9 +87,15 @@ $ ruby bh-owned.rb -a 2nd-wave.txt
 [*] Using default username: neo4j
 [*] Using default password: BloodHound
 [*] Using default URL: http://127.0.0.1:7474/
-[+] Adding ZDEVENS@INTERNAL.LOCAL to wave 2 via Password spray
-[+] Adding BPICKEREL@INTERNAL.LOCAL to wave 2 via Password spray
-[+] Querying and updating new owned nodes
+[+] Success, marked 'ZDEVENS@INTERNAL.LOCAL' as owned in wave '2' via 'Password spray'
+[+] Success, marked 'BPICKEREL@INTERNAL.LOCAL' as owned in wave '2' via 'Password spray'
+[*] Finding spread of compromise for wave 2
+[+] 5 nodes found:
+BACKUP3@INTERNAL.LOCAL
+BACKUP_SVC@INTERNAL.LOCAL
+CONTRACTINGS@INTERNAL.LOCAL
+DATABASE5.INTERNAL.LOCAL
+MANAGEMENT3.INTERNAL.LOCAL
 ```
 The `-n` flag can be used to dump the names of all nodes from the database:
 ```
@@ -142,16 +151,20 @@ $ ruby bh-owned.rb -s common-local-admins.txt
 [*] Using default username: neo4j
 [*] Using default password: BloodHound
 [*] Using default URL: http://127.0.0.1:7474/
-[+] Created SharesPasswordWith relationship: 'MANAGEMENT3.INTERNAL.LOCAL' and 'FILESERVER6.INTERNAL.LOCAL'
-[+] Created SharesPasswordWith relationship: 'MANAGEMENT3.INTERNAL.LOCAL' and 'SYSTEM38.INTERNAL.LOCAL'
-[+] Created SharesPasswordWith relationship: 'MANAGEMENT3.INTERNAL.LOCAL' and 'DESKTOP40.EXTERNAL.LOCAL'
-[+] Created SharesPasswordWith relationship: 'FILESERVER6.INTERNAL.LOCAL' and 'SYSTEM38.INTERNAL.LOCAL'
-[+] Created SharesPasswordWith relationship: 'FILESERVER6.INTERNAL.LOCAL' and 'DESKTOP40.EXTERNAL.LOCAL'
-[+] Created SharesPasswordWith relationship: 'SYSTEM38.INTERNAL.LOCAL' and 'DESKTOP40.EXTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship between 'MANAGEMENT3.INTERNAL.LOCAL' and 'FILESERVER6.INTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship between 'MANAGEMENT3.INTERNAL.LOCAL' and 'SYSTEM38.INTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship between 'MANAGEMENT3.INTERNAL.LOCAL' and 'DESKTOP40.EXTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship between 'FILESERVER6.INTERNAL.LOCAL' and 'SYSTEM38.INTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship between 'FILESERVER6.INTERNAL.LOCAL' and 'DESKTOP40.EXTERNAL.LOCAL'
+[+] Created SharesPasswordWith relationship between 'SYSTEM38.INTERNAL.LOCAL' and 'DESKTOP40.EXTERNAL.LOCAL'
 ```
-If you want to start over and remove any custom properties from your database nodes, issue the following Cypher query:
+If you want to start over and remove any custom properties & relationships from your database nodes, use `--reset`:
 ```
-MATCH (n) WHERE exists(n.wave) OR exists(n.owned) REMOVE n.wave, n.owned
+$ ruby bh-owned.rb --reset
+[*] Using default username: neo4j
+[*] Using default password: BloodHound
+[*] Using default URL: http://127.0.0.1:7474/
+[*] Removing all custom properties and SharesPasswordWith relationships
 ```
 
 #### Custom Queries
