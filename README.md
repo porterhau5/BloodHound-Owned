@@ -41,6 +41,7 @@ Usage: ruby bh-owned.rb [options]
     -a, --add <file>                 add 'owned' and 'wave' property to nodes in <file>
     -s, --spw <file>                 add 'SharesPasswordWith' relationship between all nodes in <file>
     -w, --wave <num>                 value to set 'wave' property (override default behavior)
+        --reset                      remove all custom properties and SharesPasswordWith relationships
     -e, --examples                   reference doc of customized Cypher queries for BloodHound
 ```
 It helps to create a few new indexes to help with query performance. This can be done using Neo4j's web browser or BloodHound's Raw Query feature (I recommend Neo4j's web browser for this):
@@ -172,4 +173,4 @@ Check out the "[UI Customizations and Custom Queries](http://porterhau5.com/blog
  * More, broader ideas [here](http://porterhau5.com/blog/extending-bloodhound-track-and-visualize-your-compromise/#next-steps)
 
 #### Acknowledgements
-[skawasec](https://twitter.com/skawasec) and [pfizzel](https://twitter.com/pfizzell) for the sound advice and feedback. [CptJesus](https://twitter.com/CptJesus), [_wald0](https://twitter.com/_wald0), and [harmj0y](https://twitter.com/harmj0y) for making a tremendous platform.
+[skawasec](https://twitter.com/skawasec) and [pfizzell](https://twitter.com/pfizzell) for the sound advice and feedback. [CptJesus](https://twitter.com/CptJesus), [_wald0](https://twitter.com/_wald0), and [harmj0y](https://twitter.com/harmj0y) for making a tremendous platform.
