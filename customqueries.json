@@ -21,7 +21,7 @@
                         }
                 },
                 {
-                        "name": "Show wave",
+                        "name": "Show Wave",
                         "requireNodeSelect": true,
                         "nodeSelectQuery":  {
                                 "query":"MATCH (n) WHERE exists(n.wave) WITH DISTINCT n.wave as d RETURN toString(d) ORDER BY d",
@@ -34,7 +34,7 @@
                         }
                 },
                 {
-                        "name": "Show delta for wave",
+                        "name": "Show Delta for Wave",
                         "requireNodeSelect": true,
                         "nodeSelectQuery":  {
                                 "query":"MATCH (n) WHERE exists(n.wave) WITH DISTINCT n.wave as d RETURN toString(d) ORDER BY d",
@@ -45,6 +45,13 @@
                                 "allowCollapse": true,
                                 "boxTitle": "Select wave to show deltas..."
                         }
+                },
+                {
+                        "name": "Find Clusters of Password Reuse",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=(n)-[r:SharesPasswordWith]-(m) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
                 }
 	]
 }
