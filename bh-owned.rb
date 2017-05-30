@@ -1,7 +1,7 @@
 #!/usr/bin/ruby env
 #Encoding: UTF-8
 
-# Written by: @porterhau5 - 3/29/17
+# Written by: @porterhau5 - 5/29/17
 
 require 'net/http'
 require 'uri'
@@ -12,6 +12,9 @@ require 'optparse'
 #   CREATE INDEX ON :Group(wave)
 #   CREATE INDEX ON :User(wave)
 #   CREATE INDEX ON :Computer(wave)
+#   CREATE INDEX ON :Group(blacklist)
+#   CREATE INDEX ON :User(blacklist)
+#   CREATE INDEX ON :Computer(blacklist)
 # Show indexes with ":schema"
 
 # This method changes text color to a supplied integer value which correlates to Ruby's color representation
@@ -57,7 +60,13 @@ def examples()
   puts "OPTIONAL MATCH (n1:User {wave:$num}) WITH collect(distinct n1) as c1 OPTIONAL MATCH (n2:Computer {wave:$num}) WITH collect(distinct n2) + c1 as c2 UNWIND c2 as n OPTIONAL MATCH p=shortestPath((n)-[*..20]->(m)) WHERE not(exists(m.wave)) WITH DISTINCT(m) SET m.wave=$num"
   puts ""
   puts "Show clusters of password reuse:"
-  puts "MATCH p=(n)-[r:SharesPasswordWith]-(m) RETURN p"
+  puts "MATCH p=(n)-[r:SharesPasswordWith]->(m) RETURN p"
+  puts ""
+  puts "Show blacklisted nodes:"
+  puts "MATCH (n) WHERE exists(n.blacklist) RETURN n"
+  puts ""
+  puts "Show blacklisted relationships:"
+  puts "MATCH (n)-[r]->(m) WHERE exists(r.blacklist) RETURN n,r,m"
   exit
 end
 
@@ -68,11 +77,12 @@ def craft(options)
     hash['statements'] << {'statement' => "MATCH (n) RETURN (n.name)"}
     return hash.to_json
 
-  # remove owned and wave properties, delete SharesPasswordWith relationships
+  # remove owned/wave/blacklist properties, delete SharesPasswordWith relationships
   elsif options.reset
     puts blue("[*]") + " Removing all custom properties and SharesPasswordWith relationships"
-    hash['statements'] << {'statement' => "MATCH (n) WHERE exists(n.wave) OR exists(n.owned) REMOVE n.wave, n.owned"}
+    hash['statements'] << {'statement' => "MATCH (n) WHERE exists(n.wave) OR exists(n.owned) OR exists(n.blacklist) REMOVE n.wave, n.owned, n.blacklist"}
     hash['statements'] << {'statement' => "MATCH (n)-[r:SharesPasswordWith]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r {blacklist:true}]-(m) REMOVE r.blacklist"}
     return hash.to_json
 
   # once nodes are added, set 'wave' for newly owned nodes
@@ -104,6 +114,39 @@ def craft(options)
       hash['statements'] << {'statement' => "MATCH (n {name:\"#{n.chomp}\"}),(m {name:\"#{m.chomp}\"}) WITH n,m CREATE UNIQUE (n)-[:SharesPasswordWith]->(m) WITH n,m CREATE UNIQUE (n)<-[:SharesPasswordWith]-(m) RETURN \'#{n.chomp}\',\'#{m.chomp}\'", 'includeStats' => true}
     end
     return hash.to_json
+
+  # add 'blacklist' property to each node
+  elsif options.blacklistn
+    File.foreach(options.blacklistn) do |node|
+      hash['statements'] << {'statement' => "MATCH (n {name:\"#{node.chomp}\"}) SET n.blacklist = true RETURN \'#{node.chomp}\'", 'includeStats' => true}
+    end
+    return hash.to_json
+
+  # add 'blacklist' property to each relationship
+  elsif options.blacklistr
+    File.foreach(options.blacklistr) do |path|
+      first, rel, last = path.split(',', 3)
+      hash['statements'] << {'statement' => "MATCH (n {name:\"#{first.chomp}\"})-[r:#{rel.chomp}]->(m {name:\"#{last.chomp}\"}) SET r.blacklist = true RETURN \'#{first.chomp}\',\'#{rel.chomp}\',\'#{last.chomp}\' ", 'includeStats' => true}
+    end
+    return hash.to_json
+
+  # remove 'blacklist' property from each node
+  elsif options.rblacklistn
+    File.foreach(options.rblacklistn) do |node|
+      puts blue("[*]") + " Removing blacklist property from \'#{node.chomp}\'"
+      hash['statements'] << {'statement' => "MATCH (n {name:\"#{node.chomp}\"}) REMOVE n.blacklist RETURN \'#{node.chomp}\'", 'includeStats' => true}
+    end
+    return hash.to_json
+
+  # remove 'blacklist' property from each relationship
+  elsif options.rblacklistr
+    File.foreach(options.rblacklistr) do |path|
+      first, rel, last = path.split(',', 3)
+      puts blue("[*]") + " Removing blacklist property from relationship \'#{rel.chomp}\' between \'#{first.chomp}\' and \'#{last.chomp}\'"
+      hash['statements'] << {'statement' => "MATCH (n {name:\"#{first.chomp}\"})-[r:#{rel.chomp}]->(m {name:\"#{last.chomp}\"}) REMOVE r.blacklist RETURN \'#{first.chomp}\',\'#{rel.chomp}\',\'#{last.chomp}\' ", 'includeStats' => true}
+    end
+    return hash.to_json
+
   end
 end
 
@@ -229,6 +272,56 @@ def parse(options, response)
       puts red("[-]") + " Skipping finding spread of compromise due to \"node not found\" error"
     end
   #
+  # parse blacklist node added
+  #
+  elsif options.blacklistn
+    resp = JSON.parse(response.body)
+    resp['results'].each do |r|
+      # node names provided are returned as columns
+      names = []
+      r['columns'].each do |c|
+        names.push(c)
+      end
+      r['stats'].each do |s|
+        # check stats to see if properties were set
+        if s.first == "properties_set" and s.last == 0
+          # if there are records in data, then properties already set
+          if not r['data'].any?
+            puts red("[-]") + " Property not added for #{names.first} (node not found, check spelling?)"
+          end
+        elsif s.first == "properties_set" and s.last == 1
+          puts green("[+]") + " Success, marked #{names.first} as blacklisted"
+        #elsif s.first == "properties_set" and s.last == 1
+        #  puts blue("[*]") + " Property already exist for #{names.first}, skipping"
+        end
+      end if r['stats'].any?
+    end if resp['results'].any?
+  #
+  # parse blacklist rel added
+  #
+  elsif options.blacklistr
+    resp = JSON.parse(response.body)
+    resp['results'].each do |r|
+      # node names provided are returned as columns
+      names = []
+      r['columns'].each do |c|
+        names.push(c)
+      end
+      r['stats'].each do |s|
+        # check stats to see if properties were set
+        if s.first == "properties_set" and s.last == 0
+          # if there are records in data, then properties already set
+          if not r['data'].any?
+            puts red("[-]") + " Property not added for (#{names.first})-[:#{names[1]}]->(#{names.last}), (node or relationship not found, check spelling?)"
+          end
+        elsif s.first == "properties_set" and s.last == 1
+          puts green("[+]") + " Success, marked #{names[1]} as blacklisted from #{names.first} to #{names.last}"
+        #elsif s.first == "properties_set" and s.last == 1
+        #  puts blue("[*]") + " Property already exist for #{names.first}, skipping"
+        end
+      end if r['stats'].any?
+    end if resp['results'].any?
+  #
   # parse SharesPasswordWith
   #
   elsif options.spw
@@ -267,15 +360,23 @@ def main()
   ARGV << '-h' if ARGV.empty?
   OptionParser.new do |opt|
     opt.banner = "Usage: ruby bh-owned.rb [options]"
+    opt.on('Connection Details:')
     opt.on('-u', '--username <username>', 'Neo4j database username (default: \'neo4j\')') { |o| options.username = o }
     opt.on('-p', '--password <password>', 'Neo4j database password (default: \'BloodHound\')') { |o| options.password = o }
     opt.on('-U', '--url <url>', 'URL of Neo4j RESTful host  (default: \'http://127.0.0.1:7474/\')') { |o| options.url = o }
-    opt.on('-n', '--nodes', 'get all node names') { |o| options.nodes = o }
+    opt.on('Owned/Wave/SPW:')
     opt.on('-a', '--add <file>', 'add \'owned\' and \'wave\' property to nodes in <file>') { |o| options.add = o }
-    opt.on('-s', '--spw <file>', 'add \'SharesPasswordWith\' relationship between all nodes in <file>') { |o| options.spw = o }
     opt.on('-w', '--wave <num>', Integer, 'value to set \'wave\' property (override default behavior)') { |o| options.wave = o }
+    opt.on('-s', '--spw <file>', 'add \'SharesPasswordWith\' relationship between all nodes in <file>') { |o| options.spw = o }
+    opt.on('Blacklisting:')
+    opt.on('-b', '--bl-node <file>', 'add \'blacklist\' property to nodes in <file>') { |o| options.blacklistn = o }
+    opt.on('-B', '--bl-rel <file>', 'add \'blacklist\' property to relationships in <file>') { |o| options.blacklistr = o }
+    opt.on('-r', '--remove-bl-node <file>', 'remove \'blacklist\' property from nodes in <file>') { |o| options.rblacklistn = o }
+    opt.on('-R', '--remove-bl-rel <file>', 'remove \'blacklist\' property from relationships in <file>') { |o| options.rblacklistr = o }
+    opt.on('Misc Queries:')
+    opt.on('-n', '--nodes', 'get all node names') { |o| options.nodes = o }
+    opt.on('-e', '--examples', 'reference doc of custom Cypher queries for BloodHound') { |o| options.examples = o }
     opt.on('--reset', 'remove all custom properties and SharesPasswordWith relationships') { |o| options.reset = o }
-    opt.on('-e', '--examples', 'reference doc of customized Cypher queries for BloodHound') { |o| options.examples = o }
   end.parse!
 
   if options.examples
@@ -315,6 +416,34 @@ def main()
   if options.spw
     if File.exist?(options.spw) == false
       puts red("#{options.spw} does not exist! Exiting.")
+      exit 1
+    end
+  end
+
+  if options.blacklistn
+    if File.exist?(options.blacklistn) == false
+      puts red("#{options.blacklistn} does not exist! Exiting.")
+      exit 1
+    end
+  end
+
+  if options.blacklistr
+    if File.exist?(options.blacklistr) == false
+      puts red("#{options.blacklistr} does not exist! Exiting.")
+      exit 1
+    end
+  end
+
+  if options.rblacklistn
+    if File.exist?(options.rblacklistn) == false
+      puts red("#{options.rblacklistn} does not exist! Exiting.")
+      exit 1
+    end
+  end
+
+  if options.rblacklistr
+    if File.exist?(options.rblacklistr) == false
+      puts red("#{options.rblacklistr} does not exist! Exiting.")
       exit 1
     end
   end
