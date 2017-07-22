@@ -13,21 +13,20 @@ Using these requires Neo4j, a populated database, and a BloodHound app.
 The Ruby script (`bh-owned.rb`) and custom queries (`customqueries.json`) can be used with the official BloodHound app. However, the UI customizations are currently only available in the customized app found in this [forked BloodHound repo](https://github.com/porterhau5/BloodHound).
 
 Current UI customizations include:
- * Node highlighting in custom queries
+ * Node highlighting
  * Custom properties displayed on Node Info tab
  * Run custom queries from Node Info tab
  * Adding or removing nodes from blacklist via tooltip
+ * Marking or unmarking nodes as owned via tooltip
 
-If you'd like to try out the features added in the customized BloodHound app, then follow the official BloodHound [install directions](https://github.com/BloodHoundAD/BloodHound/wiki/Getting-started) but substitute the forked repo URL (https://github.com/porterhau5/BloodHound) for the official repo URL in step 2 (cloning the repository).
-
-You'll then need to build the custom app. Instructions for doing so are in [BloodHound's wiki](https://github.com/BloodHoundAD/BloodHound/wiki/Building-BloodHound-from-source).
+If you'd like to try out the features added in the customized BloodHound app, then either download a [pre-compiled binary here](https://github.com/porterhau5/BloodHound/releases) or build the app from source. If building from source, then follow the official BloodHound [install directions](https://github.com/BloodHoundAD/BloodHound/wiki/Getting-started) but substitute the forked repo URL (https://github.com/porterhau5/BloodHound) for the official repo URL in step 2 (cloning the repository). The building instructions are on [BloodHound's wiki](https://github.com/BloodHoundAD/BloodHound/wiki/Building-BloodHound-from-source).
 
 To use the custom queries, first copy the `customqueries.json` file to the Electron project's home folder:
  * Windows: `~\AppData\Roaming\bloodhound\`
  * Mac: `~/Library/Application Support/bloodhound/`
  * Linux: I'm not sure. If someone does this on Linux and figures this out then let me know.
 
-Refresh or restart BloodHound for the changes to take effect. They can be found in the Search Container (top-left) on the Queries tab underneath the Custom Queries header.
+Refresh or restart BloodHound for the changes to take effect. Custom Queries can be found in the Search Container (top-left) on the Queries tab underneath the Custom Queries header.
 
 #### bh-owned.rb Usage
 
@@ -41,6 +40,7 @@ Connection Details:
     -U, --url <url>                  URL of Neo4j RESTful host  (default: 'http://127.0.0.1:7474/')
 Owned/Wave/SPW:
     -a, --add <file>                 add 'owned' and 'wave' property to nodes in <file>
+    -A, --add-no-wave <file>         add 'owned' property to nodes in <file> (skip 'wave' property)
     -w, --wave <num>                 value to set 'wave' property (override default behavior)
     -s, --spw <file>                 add 'SharesPasswordWith' relationship between all nodes in <file>
 Blacklisting:
@@ -65,7 +65,7 @@ CREATE INDEX ON :Computer(blacklist)
 
 ##### Owned/Wave
 
-Data is ingested using the script's `-a` flag with a file passed as an argument. Files should be in CSV format with the name of the compromised node first, followed by the method of compromise (these files can be found in the `example-files` dir):
+Data is ingested using the script's `-a` flag with a file passed as an argument. Files should be in CSV format with the name of the compromised node first, followed by the method of compromise. If no method of compromise is provided then it will default to "Not specified" (these files can be found in the `example-files` dir):
 ```
 $ cat 1st-wave.txt
 BLOPER@INTERNAL.LOCAL,LLMNR wpad
@@ -112,6 +112,23 @@ CONTRACTINGS@INTERNAL.LOCAL
 DATABASE5.INTERNAL.LOCAL
 MANAGEMENT3.INTERNAL.LOCAL
 ```
+
+The `-A` flag will skip the wave process entirely. This is useful if you just want to mark nodes as owned and move on:
+
+```
+$ cat example-files/owned-no-wave.txt 
+AMURPHY@INTERNAL.LOCAL,Social engineered
+OPIERCE@INTERNAL.LOCAL
+TROBINSON@INTERNAL.LOCAL,Phish
+$ ruby bh-owned.rb -A example-files/owned-no-wave.txt 
+[*] Using default username: neo4j
+[*] Using default password: BloodHound
+[*] Using default URL: http://127.0.0.1:7474/
+[+] Success, marked 'AMURPHY@INTERNAL.LOCAL' as owned via 'Social engineered'
+[+] Success, marked 'OPIERCE@INTERNAL.LOCAL' as owned via 'Not specified'
+[+] Success, marked 'TROBINSON@INTERNAL.LOCAL' as owned via 'Phish'
+```
+
 
 ##### SharesPasswordWith
 
@@ -167,7 +184,7 @@ $ ruby bh-owned.rb -B blacklist-rels.txt
 [+] Success, marked 'AdminTo' as blacklisted from 'ZDEVENS@INTERNAL.LOCAL' to 'MANAGEMENT3.INTERNAL.LOCAL'
 [+] Success, marked 'HasSession' as blacklisted from 'DESKTOP21.EXTERNAL.LOCAL' to 'JANTHONY@EXTERNAL.LOCAL'
 ```
-Nodes are removed from the blacklist in the same manner they are added, but use the `-r` flag. Use `-R` to remove relationhips from the blacklist:
+Nodes are removed from the blacklist in the same manner they are added, but use the `-r` flag. Use `-R` to remove relationships from the blacklist:
 ```
 $ ruby bh-owned.rb -r blacklist-nodes.txt
 [*] Using default username: neo4j
@@ -256,6 +273,7 @@ There are the current custom queries in this set:
  * __Show blacklisted nodes__: Show all nodes with the `blacklist` property set.
  * __Show blacklisted relationships__: Show all relationships (and their start and end node) with the `blacklist` property set.
  * __Show blacklist__: Show all nodes and relationships with the `blacklist` property set.
+ * __Show owned nodes__: Show all nodes with the `owned` property set.
 
 All queries (except for the blacklist-specific queries) will filter out nodes & relationships from the blacklist.
 
