@@ -73,6 +73,13 @@
                         "query": "OPTIONAL MATCH (n {blacklist:true}) WITH n OPTIONAL MATCH p=(()-[{blacklist:true}]->()) RETURN n,p",
                         "allowCollapse": true,
                         "props": {}
+                },
+                {
+                        "name": "Show owned Nodes",
+                        "requireNodeSelect": false,
+                        "query": "MATCH (n) WHERE exists(n.owned) RETURN n",
+                        "allowCollapse": true,
+                        "props": {}
                 }
 	]
 }
