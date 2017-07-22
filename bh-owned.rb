@@ -404,7 +404,7 @@ def main()
     opt.on('-U', '--url <url>', 'URL of Neo4j RESTful host  (default: \'http://127.0.0.1:7474/\')') { |o| options.url = o }
     opt.on('Owned/Wave/SPW:')
     opt.on('-a', '--add <file>', 'add \'owned\' and \'wave\' property to nodes in <file>') { |o| options.add = o }
-    opt.on('-A', '--add <file>', 'add \'owned\' property to nodes in <file> (skip \'wave\' property)') { |o| options.addnowave = o }
+    opt.on('-A', '--add-no-wave <file>', 'add \'owned\' property to nodes in <file> (skip \'wave\' property)') { |o| options.addnowave = o }
     opt.on('-w', '--wave <num>', Integer, 'value to set \'wave\' property (override default behavior)') { |o| options.wave = o }
     opt.on('-s', '--spw <file>', 'add \'SharesPasswordWith\' relationship between all nodes in <file>') { |o| options.spw = o }
     opt.on('Blacklisting:')
