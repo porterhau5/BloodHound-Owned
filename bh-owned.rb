@@ -1,7 +1,7 @@
 #!/usr/bin/ruby env
 #Encoding: UTF-8
 
-# Written by: @porterhau5 - 5/29/17
+# Written by: @porterhau5 - 7/22/17
 
 require 'net/http'
 require 'uri'
@@ -90,10 +90,13 @@ def craft(options)
     hash['statements'] << {'statement' => "OPTIONAL MATCH (n1:User {wave:#{options.wave}}) WITH collect(distinct n1) as c1 OPTIONAL MATCH (n2:Computer {wave:#{options.wave}}) WITH collect(distinct n2) + c1 as c2 UNWIND c2 as n OPTIONAL MATCH p=shortestPath((n)-[*..20]->(m)) WHERE not(exists(m.wave)) WITH DISTINCT(m) SET m.wave=#{options.wave} RETURN m.name, #{options.wave}", 'includeStats' => true}
     return hash.to_json
 
-  # add 'owned' property to nodes from file
+  # add 'owned' and 'wave' properties to nodes from file
   elsif options.add
     File.foreach(options.add) do |node|
       name, method = node.split(',', 2)
+      if method.nil?
+        method = "Not specified"
+      end
       # if -w flag set, then overwrite previous property if it exists, otherwise don't overwrite
       if options.forceWave.nil?
         hash['statements'] << {'statement' => "MATCH (n) WHERE (n.name = \"#{name.chomp}\") SET n.owned = \"#{method.chomp}\", n.wave = #{options.wave} RETURN \'#{name.chomp}\', \'#{options.wave}\', \'#{method.chomp}\'", 'includeStats' => true}
@@ -101,6 +104,17 @@ def craft(options)
         # this uses a Cypher hack for doing if/else conditionals
         hash['statements'] << {'statement' => "MATCH (n) WHERE (n.name = \"#{name.chomp}\") FOREACH (ignoreMe in CASE WHEN exists(n.wave) THEN [1] ELSE [] END | SET n.wave=n.wave) FOREACH (ignoreMe in CASE WHEN not(exists(n.wave)) THEN [1] ELSE [] END | SET n.owned = \"#{method.chomp}\", n.wave = #{options.wave}) RETURN \'#{name.chomp}\',\'#{options.wave}\',\'#{method.chomp}\'", 'includeStats' => true}
       end
+    end
+    return hash.to_json
+
+  # add 'owned' property to nodes from file
+  elsif options.addnowave
+    File.foreach(options.addnowave) do |node|
+      name, method = node.split(',', 2)
+      if method.nil?
+        method = "Not specified"
+      end
+      hash['statements'] << {'statement' => "MATCH (n) WHERE (n.name = \"#{name.chomp}\") SET n.owned = \"#{method.chomp}\" RETURN \'#{name.chomp}\', \'#{method.chomp}\'", 'includeStats' => true}
     end
     return hash.to_json
 
@@ -155,6 +169,7 @@ def sendrequest(options)
 
   # Create the HTTP object
   http = Net::HTTP.new(uri.host, uri.port)
+  http.read_timeout = 120
   request = Net::HTTP::Post.new(uri.request_uri)
   request["Accept"] = "application/json; charset=UTF-8"
   request.content_type = "application/json"
@@ -272,6 +287,29 @@ def parse(options, response)
       puts red("[-]") + " Skipping finding spread of compromise due to \"node not found\" error"
     end
   #
+  # parse nodes added (no wave)
+  #
+  elsif options.addnowave
+    resp = JSON.parse(response.body)
+    resp['results'].each do |r|
+      # node names provided are returned as columns
+      names = []
+      r['columns'].each do |c|
+        names.push(c)
+      end
+      r['stats'].each do |s|
+        # check stats to see if properties were set
+        if s.first == "properties_set" and s.last == 0
+          # if there are records in data, then properties already set
+          if not r['data'].any?
+            puts red("[-]") + " owned property not added for #{names.first} (node not found, check spelling?)"
+          end
+        elsif s.first == "properties_set" and s.last == 1
+          puts green("[+]") + " Success, marked #{names.first} as owned via #{names.last}"
+        end
+      end if r['stats'].any?
+    end if resp['results'].any?
+  #
   # parse blacklist node added
   #
   elsif options.blacklistn
@@ -366,6 +404,7 @@ def main()
     opt.on('-U', '--url <url>', 'URL of Neo4j RESTful host  (default: \'http://127.0.0.1:7474/\')') { |o| options.url = o }
     opt.on('Owned/Wave/SPW:')
     opt.on('-a', '--add <file>', 'add \'owned\' and \'wave\' property to nodes in <file>') { |o| options.add = o }
+    opt.on('-A', '--add <file>', 'add \'owned\' property to nodes in <file> (skip \'wave\' property)') { |o| options.addnowave = o }
     opt.on('-w', '--wave <num>', Integer, 'value to set \'wave\' property (override default behavior)') { |o| options.wave = o }
     opt.on('-s', '--spw <file>', 'add \'SharesPasswordWith\' relationship between all nodes in <file>') { |o| options.spw = o }
     opt.on('Blacklisting:')
@@ -405,11 +444,16 @@ def main()
     if File.exist?(options.add) == false
       puts red("#{options.add} does not exist! Exiting.")
       exit 1
-    elsif options.wave.nil?
-      # -1 means we don't know current max "n.wave" value
-      options.wave = -1
-      sendrequest(options)
-      options.forceWave = true
+    elsif options.addnowave.nil?
+      if options.wave.nil?
+        # -1 means we don't know current max "n.wave" value
+        options.wave = -1
+        sendrequest(options)
+        options.forceWave = true
+      end
+    else
+      # -2 means we're skipping wave/spread
+      options.wave = -2
     end
   end
 
