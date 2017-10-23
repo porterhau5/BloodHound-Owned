@@ -1,12 +1,13 @@
 #!/usr/bin/ruby env
 #Encoding: UTF-8
 
-# Written by: @porterhau5 - 7/22/17
+# Written by: @porterhau5 - 10/22/17
 
 require 'net/http'
 require 'uri'
 require 'json'
 require 'optparse'
+require 'set'
 
 # Recommended to create the following indexes:
 #   CREATE INDEX ON :Group(wave)
@@ -125,7 +126,7 @@ def craft(options)
       nodes.push(node)
     end
     nodes.combination(2).to_a.each do |n,m|
-      hash['statements'] << {'statement' => "MATCH (n {name:\"#{n.chomp}\"}),(m {name:\"#{m.chomp}\"}) WITH n,m CREATE UNIQUE (n)-[:SharesPasswordWith]->(m) WITH n,m CREATE UNIQUE (n)<-[:SharesPasswordWith]-(m) RETURN \'#{n.chomp}\',\'#{m.chomp}\'", 'includeStats' => true}
+      hash['statements'] << {'statement' => "MATCH (n {name:\"#{n.chomp}\"}),(m {name:\"#{m.chomp}\"}) WITH n,m MERGE (n)-[:SharesPasswordWith]->(m) WITH n,m MERGE (n)<-[:SharesPasswordWith]-(m) RETURN \'#{n.chomp}\',\'#{m.chomp}\'", 'includeStats' => true}
     end
     return hash.to_json
 
@@ -158,6 +159,29 @@ def craft(options)
       first, rel, last = path.split(',', 3)
       puts blue("[*]") + " Removing blacklist property from relationship \'#{rel.chomp}\' between \'#{first.chomp}\' and \'#{last.chomp}\'"
       hash['statements'] << {'statement' => "MATCH (n {name:\"#{first.chomp}\"})-[r:#{rel.chomp}]->(m {name:\"#{last.chomp}\"}) REMOVE r.blacklist RETURN \'#{first.chomp}\',\'#{rel.chomp}\',\'#{last.chomp}\' ", 'includeStats' => true}
+    end
+    return hash.to_json
+
+  # add connection 
+  elsif options.connection
+    ports = ["22","80","135","139","389","443","445","1433","1521","3306","3389","5432"]
+    edges = Set.new
+    nodes = {}
+    File.foreach(options.connection) do |conn|
+      conn.chomp!
+      fields = conn.split()
+      (src, sport) = fields[1].split(/:/)
+      (dst, dport) = fields[2].split(/:/)
+      if ports.member? sport
+        edges << [dst, src, sport]
+      elsif ports.member? dport
+        edges << [src, dst, dport]
+      end
+    end
+
+    edges.each do |edge|
+      puts "test: #{edge[0]} -> #{edge[1]}:#{edge[2]}"
+      hash['statements'] << {'statement' => "MERGE (s:Computer {name:\"#{edge[0]}\"}) MERGE (d:Computer {name:\"#{edge[1]}\"}) MERGE (s)-[:Connected_#{edge[2]}]->(d)", 'includeStats' => true}
     end
     return hash.to_json
 
@@ -413,6 +437,7 @@ def main()
     opt.on('-r', '--remove-bl-node <file>', 'remove \'blacklist\' property from nodes in <file>') { |o| options.rblacklistn = o }
     opt.on('-R', '--remove-bl-rel <file>', 'remove \'blacklist\' property from relationships in <file>') { |o| options.rblacklistr = o }
     opt.on('Misc Queries:')
+    opt.on('-c', '--connections <file>', 'add connection info from <file>') { |o| options.connection = o }
     opt.on('-n', '--nodes', 'get all node names') { |o| options.nodes = o }
     opt.on('-e', '--examples', 'reference doc of custom Cypher queries for BloodHound') { |o| options.examples = o }
     opt.on('--reset', 'remove all custom properties and SharesPasswordWith relationships') { |o| options.reset = o }
@@ -488,6 +513,13 @@ def main()
   if options.rblacklistr
     if File.exist?(options.rblacklistr) == false
       puts red("#{options.rblacklistr} does not exist! Exiting.")
+      exit 1
+    end
+  end
+
+  if options.connection
+    if File.exist?(options.connection) == false
+      puts red("#{options.connection} does not exist! Exiting.")
       exit 1
     end
   end

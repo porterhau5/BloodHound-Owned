@@ -80,6 +80,151 @@
                         "query": "MATCH (n) WHERE exists(n.owned) RETURN n",
                         "allowCollapse": true,
                         "props": {}
-                }
+                },
+                {
+                        "name": "Find Shortest Paths to DA Equivalency",
+                        "requireNodeSelect": true,
+                        "nodeSelectQuery":  {
+                                "query":"MATCH (n:Group) WHERE n.name =~ {name} RETURN n.name",
+                                "queryProps": {"name":"(?i).*DOMAIN CONTROLLERS.*"},
+                                "onFinish": "MATCH (n:User),(m:Group {name:{result}}),p=shortestPath((n)-[*1..]->(m)) RETURN p",
+                                "start":"",
+                                "end": "{}",
+                                "allowCollapse": true,
+                                "boxTitle": "Select domain to map..."
+                        }
+                },
+                {
+                        "name": "Find Shortest Paths to Domain Admins from Foreign User",
+                        "requireNodeSelect": true,
+                        "nodeSelectQuery": {
+                                "query": "MATCH (n:Domain) RETURN n.name",
+                                "queryProps":{},
+                                "onFinish": "MATCH (n:User) WHERE NOT n.name ENDS WITH ('@' + {result}) WITH n MATCH (m:Group {name:('DOMAIN ADMINS@' + {result})}) WITH n,m MATCH p=shortestPath((n)-[*1..]->(m)) RETURN p",
+                                "start": "{}",
+                                "end": "",
+                                "allowCollapse": true,
+                                "boxTitle": "Select target domain..."
+                        }
+                },
+                {
+                        "name": "Show Connections over 22/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_22]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 80/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_80]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 135/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_135]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 139/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_139]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 389/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_389]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 443/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_443]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 445/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_445]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 1433/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_1433]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 1521/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_1521]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 3306/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_3306]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 3389/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_3389]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Connections over 5432/tcp",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_5432]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Database Connections",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_1433|Connected_1521|Connected_3306|Connected_5432]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Show Web App Connections",
+                        "requireNodeSelect": false,
+                        "query": "MATCH p=((s:Computer)-[:Connected_80|Connected_443]->(d:Computer)) RETURN p",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Find Top 10 RDP Servers",
+                        "requireNodeSelect": false,
+			"query": "MATCH (n:Computer)-[r:Connected_3389]->(m:Computer) WHERE NOT m.name STARTS WITH 'ANONYMOUS LOGON' AND NOT m.name='' WITH m, count(r) as rel_count order by rel_count desc LIMIT 10 MATCH (n)-[r:Connected_3389]->(m) RETURN n,r,m",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+                {
+                        "name": "Find Top 10 SSH Servers",
+                        "requireNodeSelect": false,
+			"query": "MATCH (n:Computer)-[r:Connected_22]->(m:Computer) WHERE NOT m.name STARTS WITH 'ANONYMOUS LOGON' AND NOT m.name='' WITH m, count(r) as rel_count order by rel_count desc LIMIT 10 MATCH (n)-[r:Connected_22]->(m) RETURN n,r,m",
+                        "allowCollapse": true,
+                        "props": {}
+                },
+		{
+			"name": "Find Top 10 Web Apps with most Connections",
+			"requireNodeSelect": false,
+			"query": "MATCH (n:Computer)-[r:Connected_80|Connected_443]->(m:Computer) WHERE NOT m.name STARTS WITH 'ANONYMOUS LOGON' AND NOT m.name='' WITH m, count(r) as rel_count order by rel_count desc LIMIT 10 MATCH (n)-[r:Connected_80|Connected_443]->(m) RETURN n,r,m",
+			"allowCollapse": true,
+			"props": {}
+		}
 	]
 }
