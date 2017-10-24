@@ -80,10 +80,22 @@ def craft(options)
 
   # remove owned/wave/blacklist properties, delete SharesPasswordWith relationships
   elsif options.reset
-    puts blue("[*]") + " Removing all custom properties and SharesPasswordWith relationships"
+    puts blue("[*]") + " Removing all custom properties and custom relationships"
     hash['statements'] << {'statement' => "MATCH (n) WHERE exists(n.wave) OR exists(n.owned) OR exists(n.blacklist) REMOVE n.wave, n.owned, n.blacklist"}
     hash['statements'] << {'statement' => "MATCH (n)-[r:SharesPasswordWith]-(m) DELETE r"}
     hash['statements'] << {'statement' => "MATCH (n)-[r {blacklist:true}]-(m) REMOVE r.blacklist"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_22]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_80]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_135]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_139]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_389]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_443]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_445]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_1433]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_1521]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_3306]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_3389]-(m) DELETE r"}
+    hash['statements'] << {'statement' => "MATCH (n)-[r:Connected_5432]-(m) DELETE r"}
     return hash.to_json
 
   # once nodes are added, set 'wave' for newly owned nodes
@@ -164,6 +176,7 @@ def craft(options)
 
   # add connection 
   elsif options.connection
+    # initial list of interesting ports
     ports = ["22","80","135","139","389","443","445","1433","1521","3306","3389","5432"]
     edges = Set.new
     nodes = {}
@@ -172,6 +185,7 @@ def craft(options)
       fields = conn.split()
       (src, sport) = fields[1].split(/:/)
       (dst, dport) = fields[2].split(/:/)
+      # assumption: ports indicated the destination port
       if ports.member? sport
         edges << [dst, src, sport]
       elsif ports.member? dport
@@ -179,9 +193,32 @@ def craft(options)
       end
     end
 
+    dns = []
+    if options.dns
+      dns = File.readlines(options.dns)
+    end
+
     edges.each do |edge|
-      puts "test: #{edge[0]} -> #{edge[1]}:#{edge[2]}"
-      hash['statements'] << {'statement' => "MERGE (s:Computer {name:\"#{edge[0]}\"}) MERGE (d:Computer {name:\"#{edge[1]}\"}) MERGE (s)-[:Connected_#{edge[2]}]->(d)", 'includeStats' => true}
+      sname = ""
+      dname = ""
+      # if source IP is in DNS, get Computer name
+      if options.dns and dns.select{ |x| x.match(edge[0]) }.length > 0
+        record = dns.select{ |x| x.match(edge[0]) }.last.split("\"")
+        sname = record[1]
+      # otherwise use IP as node name
+      else
+        sname = edge[0]
+      end
+      # if dest IP is in DNS, get Computer name
+      if options.dns and dns.select{ |x| x.match(edge[1]) }.length > 0
+        record = dns.select{ |x| x.match(edge[1]) }.last.split("\"")
+        dname = record[1]
+      # otherwise use IP as node name
+      else
+        dname = edge[1]
+      end
+      
+      hash['statements'] << {'statement' => "MERGE (s:Computer {name:\"#{sname}\"}) MERGE (d:Computer {name:\"#{dname}\"}) MERGE (s)-[:Connected_#{edge[2]}]->(d)", 'includeStats' => true}
     end
     return hash.to_json
 
@@ -422,7 +459,7 @@ def main()
   ARGV << '-h' if ARGV.empty?
   OptionParser.new do |opt|
     opt.banner = "Usage: ruby bh-owned.rb [options]"
-    opt.on('Connection Details:')
+    opt.on('Server Details:')
     opt.on('-u', '--username <username>', 'Neo4j database username (default: \'neo4j\')') { |o| options.username = o }
     opt.on('-p', '--password <password>', 'Neo4j database password (default: \'BloodHound\')') { |o| options.password = o }
     opt.on('-U', '--url <url>', 'URL of Neo4j RESTful host  (default: \'http://127.0.0.1:7474/\')') { |o| options.url = o }
@@ -436,8 +473,10 @@ def main()
     opt.on('-B', '--bl-rel <file>', 'add \'blacklist\' property to relationships in <file>') { |o| options.blacklistr = o }
     opt.on('-r', '--remove-bl-node <file>', 'remove \'blacklist\' property from nodes in <file>') { |o| options.rblacklistn = o }
     opt.on('-R', '--remove-bl-rel <file>', 'remove \'blacklist\' property from relationships in <file>') { |o| options.rblacklistr = o }
+    opt.on('Connections:')
+    opt.on('-c', '--connections <file>', 'add connection info from netstat <file>') { |o| options.connection = o }
+    opt.on('-d', '--dns <file>', 'contains DNS mapping of IP to computer name (10.2.3.4,srv1.int.local)') { |o| options.dns = o }
     opt.on('Misc Queries:')
-    opt.on('-c', '--connections <file>', 'add connection info from <file>') { |o| options.connection = o }
     opt.on('-n', '--nodes', 'get all node names') { |o| options.nodes = o }
     opt.on('-e', '--examples', 'reference doc of custom Cypher queries for BloodHound') { |o| options.examples = o }
     opt.on('--reset', 'remove all custom properties and SharesPasswordWith relationships') { |o| options.reset = o }
@@ -521,6 +560,14 @@ def main()
     if File.exist?(options.connection) == false
       puts red("#{options.connection} does not exist! Exiting.")
       exit 1
+    end
+    if options.dns
+      if File.exist?(options.dns) == false
+        puts red("#{options.dns} does not exist! Exiting.")
+        exit 1
+      end
+    else
+      puts "No DNS file set (-d), using IP addresses as Computer node names."
     end
   end
 
