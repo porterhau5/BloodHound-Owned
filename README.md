@@ -34,7 +34,7 @@ This script is the primary means for updating the Neo4j database to support the 
 ```
 $ ruby bh-owned.rb
 Usage: ruby bh-owned.rb [options]
-Connection Details:
+Server Details:
     -u, --username <username>        Neo4j database username (default: 'neo4j')
     -p, --password <password>        Neo4j database password (default: 'BloodHound')
     -U, --url <url>                  URL of Neo4j RESTful host  (default: 'http://127.0.0.1:7474/')
@@ -48,6 +48,9 @@ Blacklisting:
     -B, --bl-rel <file>              add 'blacklist' property to relationships in <file>
     -r, --remove-bl-node <file>      remove 'blacklist' property from nodes in <file>
     -R, --remove-bl-rel <file>       remove 'blacklist' property from relationships in <file>
+Connections:
+    -c, --connections <file>         add connection info from netstat <file>
+    -d, --dns <file>                 contains DNS mapping of IP to computer name (10.2.3.4,srv1.int.local)
 Misc Queries:
     -n, --nodes                      get all node names
     -e, --examples                   reference doc of custom Cypher queries for BloodHound
