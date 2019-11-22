@@ -1,230 +1,133 @@
 {
-        "queries": [
-                {
-                        "name": "Find all owned Domain Admins",
-                        "requireNodeSelect": false,
-                        "query": "MATCH (n:Group) WHERE n.name =~ {name} WITH n MATCH p=(n)<-[r:MemberOf*1..]-(m) WHERE exists(m.owned) AND NONE (x IN nodes(p) WHERE exists(x.blacklist)) AND NONE (x in relationships(p) WHERE exists(x.blacklist)) RETURN nodes(p),relationships(p)",
-                        "allowCollapse": false,
-                        "props": {"name": "(?i).*DOMAIN ADMINS.*"}
-                },
-                {
-                        "name": "Find Shortest Paths from owned node to Domain Admins",
-                        "requireNodeSelect": true,
-                        "nodeSelectQuery":  {
-                                "query":"MATCH (n:Group) WHERE n.name =~ {name} RETURN n.name",
-                                "queryProps": {"name":"(?i).*DOMAIN ADMINS.*"},
-                                            "onFinish": "MATCH (n),(m:Group {name:{result}}),p=shortestPath((n)-[*1..12]->(m)) WHERE exists(n.owned) AND NONE (x IN nodes(p) WHERE exists(x.blacklist)) AND NONE (x in relationships(p) WHERE exists(x.blacklist)) RETURN p",
-                                        "start":"",
-                                        "end": "{}",
-                                        "allowCollapse": true,
-                                        "boxTitle": "Select domain to map..."
-                        }
-                },
-                {
-                        "name": "Show Wave",
-                        "requireNodeSelect": true,
-                        "nodeSelectQuery":  {
-                                "query":"MATCH (n) WHERE exists(n.wave) WITH DISTINCT n.wave as d RETURN toString(d) ORDER BY d",
-                                "queryProps": {},
-                                "onFinish": "OPTIONAL MATCH (n1:User {wave:toInt({result})}) WITH collect(distinct n1) as c1 OPTIONAL MATCH (n2:Computer {wave:toInt({result})}) WITH collect(distinct n2) + c1 as c2 OPTIONAL MATCH (n3:Group {wave:toInt({result})}) WITH c2, collect(distinct n3) + c2 as c3 UNWIND c2 as n UNWIND c3 as m MATCH (n)-[r]->(m) WHERE not(exists(n.blacklist)) AND not(exists(m.blacklist)) AND not(exists(r.blacklist)) RETURN n,r,m",
-                                "start": "",
-                                "end": "",
-                                "allowCollapse": true,
-                                "boxTitle": "Select wave..."
-                        }
-                },
-                {
-                        "name": "Highlight Delta for Wave",
-                        "requireNodeSelect": true,
-                        "nodeSelectQuery":  {
-                                "query":"MATCH (n) WHERE exists(n.wave) WITH DISTINCT n.wave as d RETURN toString(d) ORDER BY d",
-                                "queryProps": {},
-                                "onFinish": "MATCH (n)-[r]->(m) WHERE n.wave<=toInt({result}) AND not(exists(n.blacklist)) AND not(exists(m.blacklist)) AND not(exists(r.blacklist)) RETURN n,r,m",
-                                "start": "",
-                                "end": "",
-                                "allowCollapse": true,
-                                "boxTitle": "Select wave to show deltas..."
-                        }
-                },
-                {
-                        "name": "Find Clusters of Password Reuse",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=(n)-[r:SharesPasswordWith]->(m) WHERE not(exists(n.blacklist)) AND not(exists(m.blacklist)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Blacklisted Nodes",
-                        "requireNodeSelect": false,
-                        "query": "MATCH (n) WHERE exists(n.blacklist) RETURN n",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Blacklisted Relationships",
-                        "requireNodeSelect": false,
-                        "query": "MATCH (n)-[r]->(m) WHERE exists(r.blacklist) RETURN n,r,m",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Blacklist",
-                        "requireNodeSelect": false,
-                        "query": "OPTIONAL MATCH (n {blacklist:true}) WITH n OPTIONAL MATCH p=(()-[{blacklist:true}]->()) RETURN n,p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show owned Nodes",
-                        "requireNodeSelect": false,
-                        "query": "MATCH (n) WHERE exists(n.owned) RETURN n",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Find Shortest Paths to DA Equivalency",
-                        "requireNodeSelect": true,
-                        "nodeSelectQuery":  {
-                                "query":"MATCH (n:Group) WHERE n.name =~ {name} RETURN n.name",
-                                "queryProps": {"name":"(?i).*DOMAIN CONTROLLERS.*"},
-                                "onFinish": "MATCH (n:User),(m:Group {name:{result}}),p=shortestPath((n)-[*1..]->(m)) RETURN p",
-                                "start":"",
-                                "end": "{}",
-                                "allowCollapse": true,
-                                "boxTitle": "Select domain to map..."
-                        }
-                },
-                {
-                        "name": "Find Shortest Paths to Domain Admins from Foreign User",
-                        "requireNodeSelect": true,
-                        "nodeSelectQuery": {
-                                "query": "MATCH (n:Domain) RETURN n.name",
-                                "queryProps":{},
-                                "onFinish": "MATCH (n:User) WHERE NOT n.name ENDS WITH ('@' + {result}) WITH n MATCH (m:Group {name:('DOMAIN ADMINS@' + {result})}) WITH n,m MATCH p=shortestPath((n)-[*1..]->(m)) RETURN p",
-                                "start": "{}",
-                                "end": "",
-                                "allowCollapse": true,
-                                "boxTitle": "Select target domain..."
-                        }
-                },
-                {
-                        "name": "Show Connections over 22/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_22]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 80/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_80]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 135/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_135]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 139/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_139]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 389/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_389]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 443/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_443]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 445/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_445]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 1433/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_1433]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 1521/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_1521]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 3306/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_3306]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 3389/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_3389]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Connections over 5432/tcp",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_5432]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Database Connections",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_1433|Connected_1521|Connected_3306|Connected_5432]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Show Web App Connections",
-                        "requireNodeSelect": false,
-                        "query": "MATCH p=((s:Computer)-[:Connected_80|Connected_443]->(d:Computer)) RETURN p",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Find Top 10 RDP Servers",
-                        "requireNodeSelect": false,
-			"query": "MATCH (n:Computer)-[r:Connected_3389]->(m:Computer) WHERE NOT m.name STARTS WITH 'ANONYMOUS LOGON' AND NOT m.name='' WITH m, count(r) as rel_count order by rel_count desc LIMIT 10 MATCH (n)-[r:Connected_3389]->(m) RETURN n,r,m",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-                {
-                        "name": "Find Top 10 SSH Servers",
-                        "requireNodeSelect": false,
-			"query": "MATCH (n:Computer)-[r:Connected_22]->(m:Computer) WHERE NOT m.name STARTS WITH 'ANONYMOUS LOGON' AND NOT m.name='' WITH m, count(r) as rel_count order by rel_count desc LIMIT 10 MATCH (n)-[r:Connected_22]->(m) RETURN n,r,m",
-                        "allowCollapse": true,
-                        "props": {}
-                },
-		{
-			"name": "Find Top 10 Web Apps with most Connections",
-			"requireNodeSelect": false,
-			"query": "MATCH (n:Computer)-[r:Connected_80|Connected_443]->(m:Computer) WHERE NOT m.name STARTS WITH 'ANONYMOUS LOGON' AND NOT m.name='' WITH m, count(r) as rel_count order by rel_count desc LIMIT 10 MATCH (n)-[r:Connected_80|Connected_443]->(m) RETURN n,r,m",
-			"allowCollapse": true,
-			"props": {}
-		}
-	]
+  "queries":[
+    {
+      "name": "Kerberoastable Users",
+      "queryList":[
+        {
+          "final":true,
+          "requireNodeSelect": false,
+          "query": "MATCH (n {hasspn: true}) RETURN n",
+          "allowCollapse": true,
+          "props": {}
+        }
+      ]
+    },
+
+    {
+      "name": "Where can owned users RDP",
+      "queryList":[
+        {
+          "final":true,
+          "requireNodeSelect": false,
+          "query": "MATCH p=(m:User {owned: true})-[r:MemberOf|CanRDP*1..]->(n:Computer) RETURN p",
+          "allowCollapse": true,
+          "props": {}
+        }
+      ]
+    },
+
+    {
+      "name": "Users with most local admin rights",
+      "queryList":[
+        {
+          "final":true,
+          "requireNodeSelect": false,
+          "query": "MATCH (U:User)-[r:MemberOf|AdminTo*1..]->(C:Computer) WITH U.name as n, COUNT(DISTINCT(C)) AS c RETURN n,c ORDER BY c DESC LIMIT 5",
+          "allowCollapse": true,
+          "props": {}
+        }
+      ]
+    },
+    {
+      "name": "Kerberoastable Admins",
+      "queryList":[
+        {
+          "final":true,
+          "query":
+            "MATCH (n:Group) WHERE n.objectsid =~ {name} WITH n MATCH p=(n)<-[r:MemberOf*1..]-(m {hasspn: true}) RETURN p",
+          "allowCollapse": true,
+          "props": {
+            "name": "(?i)S-1-5-.*-512"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Show owned Nodes",
+      "queryList":[
+        {
+          "final":true,
+          "requireNodeSelect": false,
+          "query": "MATCH (n {owned: true}) RETURN n",
+          "allowCollapse": true,
+          "props": {}
+        }
+      ]
+    },
+    {
+      "name": "Find computers with owned Admins",
+      "queryList": [
+        {
+          "final": true,
+          "query": "MATCH p=shortestPath((n:User {owned:true})-[r:AdminTo|MemberOf*1..]->(c:Computer)) return p",
+          "allowCollapse": false
+        }
+      ]
+    },
+    {
+      "name": "Find owned Groups",
+      "queryList":[
+        {
+          "final":true,
+          "requireNodeSelect": false,
+          "query": "MATCH (n:User {owned: true})-[r:MemberOf]->(g:Group) RETURN g",
+          "allowCollapse": true,
+          "props": {}
+        }
+      ]
+    },
+    {
+      "name": "Find owned Domain Admins",
+      "queryList":[
+        {
+          "final": true,
+          "title": "Select a domain...",
+          "query": "MATCH (n:Group) WHERE n.name =~ {name} AND n.owned=true WITH n MATCH p=(n)<-[r:MemberOf*1..]-(m) RETURN p",
+          "props": {
+            "name": "(?i).*DOMAIN ADMINS.*"
+          },
+          "allowCollapse": false
+        }
+      ]
+    },
+    {
+      "name": "Find Shortest Path from owned Node to Domain Admin",
+      "queryList": [
+        {
+          "final": false,
+          "title": "Select a Domain Admin group...",
+          "query": "MATCH (n:Group) WHERE n.name =~ {name} RETURN n.name ORDER BY n.name DESC",
+          "props": {
+            "name": "(?i).*DOMAIN ADMINS.*"
+          }
+        },
+        {
+          "final": true,
+          "query": "MATCH (n:User),(m:Group {name:{result}}),p=shortestPath((n {owned:true})-[r:MemberOf|AdminTo|HasSession|Contains|GpLink|Owns|DCSync|AllExtendedRights|ForceChangePassword|GenericAll|GenericWrite|WriteDacl|WriteOwner*1..]->(m)) RETURN p",
+          "allowCollapse": true,
+          "endNode":"{}"
+        }
+      ]
+    },
+    {
+      "name": "Computers with administrative Domain Users",
+      "queryList": [
+        {
+          "final": true,
+          "query": "MATCH p=(m:Group)-[r:AddMember|AdminTo|AllExtendedRights|AllowedToDelegate|CanRDP|Contains|ExecuteDCOM|ForceChangePassword|GenericAll|GenericWrite|GetChanges|GetChangesAll|HasSession|Owns|ReadLAPSPassword|SQLAdmin|TrustedBy|WriteDACL|WriteOwner|AddAllowedToAct|AllowedToAct]->(t) WHERE m.objectsid ENDS WITH '-513' OR m.objectsid ENDS WITH '-515' OR m.objectsid ENDS WITH 'S-1-5-11' OR m.objectsid ENDS WITH 'S-1-1-0' RETURN p"
+        }
+      ]
+    }
+  ]
 }
+
