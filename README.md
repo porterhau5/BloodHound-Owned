@@ -24,7 +24,7 @@ If you'd like to try out the features added in the customized BloodHound app, th
 To use the custom queries, first copy the `customqueries.json` file to the Electron project's home folder:
  * Windows: `~\AppData\Roaming\bloodhound\`
  * Mac: `~/Library/Application Support/bloodhound/`
- * Linux: I'm not sure. If someone does this on Linux and figures this out then let me know.
+ * Linux: `~/.config/bloodhound/`.
 
 Refresh or restart BloodHound for the changes to take effect. Custom Queries can be found in the Search Container (top-left) on the Queries tab underneath the Custom Queries header.
 
